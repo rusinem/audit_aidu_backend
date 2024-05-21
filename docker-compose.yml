@@ -1,0 +1,91 @@
+version: '3'
+
+services:
+
+  terminal-db:
+    image: postgres:12.2
+    container_name: terminal-db
+    env_file:
+      - .env.local
+    volumes:
+      - terminal_postgres_data:/var/lib/postgresql/data
+    networks:
+      - signedup
+        
+  terminal-redis:
+    image: redis
+    container_name: terminal-redis
+    networks:
+      - signedup
+
+  terminal:
+    build:
+      context: ./
+      dockerfile: .infra/dockerfile/Dockerfile
+    image: registry.signedup.me/signed-up/signedup-terminal-backend:latest
+    container_name: terminal
+    entrypoint: ["/code/entrypoint.sh"]
+    #command: gunicorn -b 0.0.0.0:8000 --chdir /code/signedup su.wsgi
+    command: python /code/terminal/manage.py runserver 0.0.0.0:8000
+    #volumes:
+    #  - signedup/:/signedup/
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.local
+    depends_on:
+      - terminal-redis
+      - terminal-db
+    networks:
+      - signedup
+
+  terminal-qcluster:
+    build:
+      context: ./
+      dockerfile: .infra/dockerfile/Dockerfile
+    image: registry.signedup.me/signed-up/signedup-terminal-backend:latest
+    container_name: terminal-qcluster
+    command:  python terminal/manage.py qcluster
+    env_file:
+      - .env.local
+    depends_on:
+      - terminal-redis
+      - terminal-db
+    networks:
+      - signedup
+
+  terminal-swagger-ui:
+    build:
+      context: ./
+      dockerfile: .infra/dockerfile/Dockerfile.swagger-ui
+    container_name: "terminal-swagger-ui"
+    ports:
+      - "8010:80"
+    environment:
+      SPEC_URL: /api.yaml
+      # API_URL: ""
+    networks:
+      - signedup
+
+  terminal-pdf-render:
+    build:
+      context: ./
+      dockerfile: .infra/dockerfile/Dockerfile.pdf-render
+    container_name: "terminal-pdf-render"
+    environment:
+      ALLOW_HTTP: "true"
+      NODE_ENV: "development"
+      PORT: 9000
+      DEBUG_MODE: "false"
+#    ports:
+#      - "4012:9000"
+    networks:
+      - signedup
+
+volumes:
+  terminal_postgres_data:
+    external: true
+
+networks:
+  signedup:
+    external: true
